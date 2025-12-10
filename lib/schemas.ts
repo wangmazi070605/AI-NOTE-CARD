@@ -13,7 +13,7 @@ export const cardSchema = z.object({
       message: "标签不能为空",
     }),
   colorTheme: z.enum(["blue", "green", "red", "purple", "yellow"], {
-    errorMap: () => ({ message: "颜色主题必须是 blue, green, red, purple 或 yellow 之一" }),
+    message: "颜色主题必须是 blue, green, red, purple 或 yellow 之一",
   }),
   borderColor: z
     .string()

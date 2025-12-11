@@ -33,6 +33,9 @@ export async function generateDiagnosis(
     console.log("=== DeepSeek API 调用信息 ===");
     console.log("请求地址:", "https://api.deepseek.com/v1/chat/completions");
     console.log("模型:", "deepseek-chat");
+    console.log("分析模式:", mode);
+    console.log("用户输入内容:", inputText);
+    console.log("输入内容长度:", inputText.length, "字符");
     console.log("API Key 前6位:", apiKey.substring(0, 6) + "...");
     console.log("API Key 长度:", apiKey.length);
     console.log("API Key 格式:", apiKey.startsWith("sk-") ? "正确" : "可能不正确");

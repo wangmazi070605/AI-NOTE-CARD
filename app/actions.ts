@@ -34,22 +34,27 @@ export async function generateCardContent(
     console.log("API Key 格式:", apiKey.startsWith("sk-") ? "正确" : "可能不正确");
 
     // 直接使用 fetch 调用 DeepSeek API
-    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: "你是一个笔记整理专家，请分析用户的输入，提取关键信息并按照 JSON 格式输出。",
-          },
-          {
-            role: "user",
-            content: `请分析以下笔记内容，并按照以下 JSON 格式输出（必须是有效的 JSON，不要包含任何其他文字）：
+    // 添加超时处理（30秒）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [
+            {
+              role: "system",
+              content: "你是一个笔记整理专家，请分析用户的输入，提取关键信息并按照 JSON 格式输出。",
+            },
+            {
+              role: "user",
+              content: `请分析以下笔记内容，并按照以下 JSON 格式输出（必须是有效的 JSON，不要包含任何其他文字）：
 
 {
   "title": "精炼的标题",
@@ -70,55 +75,84 @@ ${inputText}
 5. 生成对应的 hex 颜色值（borderColor）
 
 只返回 JSON，不要包含任何其他文字。`,
-          },
-        ],
-        temperature: 0.7,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("DeepSeek API 错误响应:", {
-        status: response.status,
-        statusText: response.statusText,
-        data: errorData,
+            },
+          ],
+          temperature: 0.7,
+        }),
+        signal: controller.signal,
       });
-      throw new Error(
-        `DeepSeek API 请求失败: ${response.status} ${response.statusText}`
-      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData?.error?.message || response.statusText;
+        console.error("DeepSeek API 错误响应:", {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData,
+        });
+        throw new Error(
+          `DeepSeek API 请求失败 (${response.status}): ${errorMessage}`
+        );
+      }
+
+      const data = await response.json();
+      console.log("DeepSeek API 调用成功，响应数据:", JSON.stringify(data, null, 2));
+
+      // 提取响应文本
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) {
+        throw new Error("DeepSeek API 返回的数据格式不正确：缺少 choices[0].message.content");
+      }
+
+      console.log("原始响应文本:", text);
+
+      // 尝试提取 JSON（可能包含 markdown 代码块）
+      let jsonText = text.trim();
+      
+      // 移除可能的 markdown 代码块标记
+      if (jsonText.startsWith("```json")) {
+        jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+      } else if (jsonText.startsWith("```")) {
+        jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
+      }
+
+      // 解析 JSON
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error("JSON 解析失败:", parseError);
+        console.error("尝试解析的文本:", jsonText);
+        throw new Error(`JSON 解析失败: ${parseError instanceof Error ? parseError.message : "未知错误"}`);
+      }
+      
+      // 使用 Zod Schema 验证
+      let validated;
+      try {
+        validated = cardSchema.parse(parsed);
+      } catch (validationError) {
+        console.error("数据验证失败:", validationError);
+        console.error("解析后的数据:", parsed);
+        throw new Error(`数据验证失败: ${validationError instanceof Error ? validationError.message : "未知错误"}`);
+      }
+      
+      console.log("JSON 解析和验证成功");
+      return validated;
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      
+      // 处理超时错误
+      if (fetchError.name === 'AbortError') {
+        throw new Error("请求超时：DeepSeek API 响应时间超过 30 秒，请稍后重试");
+      }
+      
+      // 重新抛出其他 fetch 错误
+      throw fetchError;
     }
-
-    const data = await response.json();
-    console.log("DeepSeek API 调用成功，响应数据:", JSON.stringify(data, null, 2));
-
-    // 提取响应文本
-    const text = data.choices?.[0]?.message?.content;
-    if (!text) {
-      throw new Error("DeepSeek API 返回的数据格式不正确");
-    }
-
-    console.log("原始响应文本:", text);
-
-    // 尝试提取 JSON（可能包含 markdown 代码块）
-    let jsonText = text.trim();
-    
-    // 移除可能的 markdown 代码块标记
-    if (jsonText.startsWith("```json")) {
-      jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    } else if (jsonText.startsWith("```")) {
-      jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-    }
-
-    // 解析 JSON
-    const parsed = JSON.parse(jsonText);
-    
-    // 使用 Zod Schema 验证
-    const validated = cardSchema.parse(parsed);
-    
-    console.log("JSON 解析和验证成功");
-    return validated;
   } catch (error: any) {
-    // 记录完整的错误信息
+    // 记录完整的错误信息（生产环境也会记录到 Vercel 日志）
     const errorDetails = {
       message: error?.message,
       status: error?.status,
@@ -126,18 +160,12 @@ ${inputText}
       statusText: error?.statusText,
       cause: error?.cause,
       name: error?.name,
-      url: error?.url, // 实际请求的 URL
-      response: error?.response ? {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        url: error.response.url,
-      } : null,
-      // 尝试获取更多错误信息
-      stack: error?.stack,
+      url: error?.url,
+      stack: error?.stack?.split('\n').slice(0, 5), // 只记录前5行堆栈
     };
     
-    console.error("DeepSeek API 错误详情:", JSON.stringify(errorDetails, null, 2));
+    console.error("=== DeepSeek API 错误详情 ===");
+    console.error(JSON.stringify(errorDetails, null, 2));
     
     // 尝试从 cause 中获取更多信息
     if (error?.cause) {
@@ -155,33 +183,43 @@ ${inputText}
       (errorResponse && JSON.stringify(errorResponse).includes("Insufficient Balance"))
     ) {
       throw new Error(
-        "账户余额不足！\n\n" +
-        "请访问 https://platform.deepseek.com/ 充值账户余额。\n" +
-        "DeepSeek API 需要账户有足够的余额才能使用。"
+        "账户余额不足！请访问 https://platform.deepseek.com/ 充值账户余额。"
       );
     }
     
     // 根据不同的错误类型提供更具体的错误信息
     if (error?.status === 404 || error?.statusCode === 404 || errorMessage.includes("Not Found")) {
       throw new Error(
-        "API 端点未找到 (404)。可能的原因：\n" +
-        "1. API Key 无效或已过期 - 请访问 https://platform.deepseek.com/api_keys 检查\n" +
-        "2. API Key 没有权限访问该模型\n" +
-        "3. 账户余额不足\n" +
-        "4. 模型名称 'deepseek-chat' 不正确\n" +
-        `\n错误详情: ${errorMessage || "未知"}`
+        `API 端点未找到 (404)。请检查：1) API Key 是否有效 2) 环境变量是否配置 3) 账户余额是否充足。详情: ${errorMessage}`
       );
     }
     
-    if (error?.status === 401 || error?.statusCode === 401) {
-      throw new Error("API Key 认证失败 (401)。请检查 API Key 是否正确。");
+    if (error?.status === 401 || error?.statusCode === 401 || errorMessage.includes("401")) {
+      throw new Error("API Key 认证失败 (401)。请检查 Vercel 环境变量中的 DEEPSEEK_API_KEY 是否正确。");
     }
     
-    if (error?.status === 429 || error?.statusCode === 429) {
+    if (error?.status === 429 || error?.statusCode === 429 || errorMessage.includes("429")) {
       throw new Error("请求频率过高 (429)。请稍后再试。");
     }
     
-    throw new Error(`AI 生成失败: ${errorMessage || "未知错误"}`);
+    // 网络错误
+    if (errorMessage.includes("fetch") || errorMessage.includes("network") || errorMessage.includes("timeout")) {
+      throw new Error(`网络请求失败: ${errorMessage}。请检查网络连接或稍后重试。`);
+    }
+    
+    // JSON 解析错误
+    if (errorMessage.includes("JSON") || errorMessage.includes("parse")) {
+      throw new Error(`数据解析失败: ${errorMessage}。请重试或联系技术支持。`);
+    }
+    
+    // 数据验证错误
+    if (errorMessage.includes("验证") || errorMessage.includes("validation")) {
+      throw new Error(`数据验证失败: ${errorMessage}。AI 返回的数据格式不正确，请重试。`);
+    }
+    
+    // 通用错误（确保错误信息对用户友好）
+    const userFriendlyMessage = errorMessage || "未知错误";
+    throw new Error(`生成卡片失败: ${userFriendlyMessage}。请检查 Vercel 日志获取更多信息。`);
   }
 }
 

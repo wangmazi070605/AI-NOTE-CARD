@@ -1,19 +1,23 @@
 "use server";
 
-import { cardSchema, type Card } from "@/lib/schemas";
+import { diagnosisSchema, type Diagnosis } from "@/lib/schemas";
+
+export type AnalysisMode = "savage" | "healing";
 
 // 直接使用 fetch 调用 DeepSeek API，避免 AI SDK 使用不支持的 /responses 端点
 // 根据 DeepSeek 文档：https://api-docs.deepseek.com/zh-cn/
 // 正确的端点是 https://api.deepseek.com/v1/chat/completions
 
 /**
- * 生成卡片内容的 Server Action
- * @param inputText 用户输入的笔记内容
- * @returns 生成的卡片对象
+ * 生成心理诊断结果的 Server Action
+ * @param inputText 用户输入的文本（聊天记录、碎碎念等）
+ * @param mode 分析模式：savage（毒舌）或 healing（治愈）
+ * @returns 生成的心理诊断结果
  */
-export async function generateCardContent(
-  inputText: string
-): Promise<Card> {
+export async function generateDiagnosis(
+  inputText: string,
+  mode: AnalysisMode = "healing"
+): Promise<Diagnosis> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   
   if (!apiKey) {
@@ -50,34 +54,65 @@ export async function generateCardContent(
           messages: [
             {
               role: "system",
-              content: "你是一个笔记整理专家，请分析用户的输入，提取关键信息并按照 JSON 格式输出。",
+              content: mode === "savage" 
+                ? "你是一个毒舌但一针见血的心理分析师。你的风格是直接、犀利、不留情面，但目的是帮助用户认清真相。用幽默但尖锐的语言戳破用户的自我欺骗。"
+                : "你是一个温暖治愈的心理分析师。你的风格是共情、理解、支持。用温柔但坚定的语言帮助用户看到自己的价值，给予希望和力量。",
             },
             {
               role: "user",
-              content: `请分析以下笔记内容，并按照以下 JSON 格式输出（必须是有效的 JSON，不要包含任何其他文字）：
+              content: `请分析以下用户输入，并按照以下 JSON 格式输出（必须是有效的 JSON，不要包含任何其他文字）：
 
 {
-  "title": "精炼的标题",
-  "summary": "内容摘要",
-  "tags": ["标签1", "标签2", "标签3"],
-  "colorTheme": "blue|green|red|purple|yellow",
-  "borderColor": "#颜色值"
+  "emotionType": "anxiety|lovebrain|emo|happy|confused|angry|sad|excited",
+  "title": "诊断标题（一句话概括）",
+  "analysis": "详细的心理分析（${mode === "savage" ? "毒舌风格，直接戳破真相" : "治愈风格，温暖共情"}，200-300字）",
+  "tags": ["情绪标签1", "情绪标签2", "情绪标签3"],
+  "emotionColor": "#颜色值（根据情绪类型选择）",
+  "suggestions": ["建议1", "建议2"],
+  "intensity": 0-100的整数（情绪强度）
 }
 
 用户输入：
 ${inputText}
 
 请根据输入内容：
-1. 生成一个精炼的标题（title）
-2. 生成内容摘要（summary）
-3. 提取3个相关标签（tags）
-4. 根据内容情绪选择颜色主题（colorTheme）：blue（平静/专业）、green（积极/成长）、red（重要/紧急）、purple（创意/灵感）、yellow（提醒/注意）
-5. 生成对应的 hex 颜色值（borderColor）
+1. 判断主要情绪类型（emotionType）：
+   - anxiety: 焦虑、不安、担心
+   - lovebrain: 恋爱脑、情感依赖、过度投入
+   - emo: 情绪低落、抑郁倾向
+   - happy: 开心、愉悦、满足
+   - confused: 迷茫、困惑、不确定
+   - angry: 愤怒、不满、怨恨
+   - sad: 悲伤、失落、难过
+   - excited: 兴奋、激动、期待
+
+2. 生成诊断标题（title）：一句话概括核心问题或状态
+
+3. 生成详细分析（analysis）：
+   ${mode === "savage" 
+     ? "用毒舌但一针见血的方式分析，直接指出问题本质，戳破自我欺骗，但要有建设性。"
+     : "用温暖治愈的方式分析，共情用户的感受，给予理解和支持，传递希望。"}
+
+4. 提取2-5个情绪标签（tags）：如"焦虑"、"自我怀疑"、"情感依赖"等
+
+5. 根据情绪类型选择颜色（emotionColor）：
+   - anxiety: #6366f1 (灰蓝)
+   - lovebrain: #ec4899 (粉色)
+   - emo: #475569 (深灰)
+   - happy: #fbbf24 (金黄)
+   - confused: #8b5cf6 (紫色)
+   - angry: #ef4444 (红色)
+   - sad: #3b82f6 (蓝色)
+   - excited: #10b981 (绿色)
+
+6. 提供1-3条实用建议（suggestions）
+
+7. 评估情绪强度（intensity）：0-100的整数
 
 只返回 JSON，不要包含任何其他文字。`,
             },
           ],
-          temperature: 0.7,
+          temperature: mode === "savage" ? 0.8 : 0.7,
         }),
         signal: controller.signal,
       });
@@ -131,7 +166,7 @@ ${inputText}
       // 使用 Zod Schema 验证
       let validated;
       try {
-        validated = cardSchema.parse(parsed);
+        validated = diagnosisSchema.parse(parsed);
       } catch (validationError) {
         console.error("数据验证失败:", validationError);
         console.error("解析后的数据:", parsed);
@@ -219,7 +254,7 @@ ${inputText}
     
     // 通用错误（确保错误信息对用户友好）
     const userFriendlyMessage = errorMessage || "未知错误";
-    throw new Error(`生成卡片失败: ${userFriendlyMessage}。请检查 Vercel 日志获取更多信息。`);
+    throw new Error(`心理分析失败: ${userFriendlyMessage}。请检查 Vercel 日志获取更多信息。`);
   }
 }
 

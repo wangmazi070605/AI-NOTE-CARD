@@ -1,0 +1,379 @@
+"use client";
+
+import { useState } from "react";
+import { generateDiagnosis, type AnalysisMode } from "@/app/actions";
+import { generateFortuneCard } from "@/app/actions/fortune";
+import type { Diagnosis } from "@/lib/schemas";
+import type { FortuneCard } from "@/lib/schemas";
+import FortuneCardComponent from "@/components/FortuneCard";
+
+// 情绪类型对应的UI效果配置
+const emotionEffects = {
+  anxiety: {
+    bg: "bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900",
+    pattern: "anxiety-pattern",
+    animation: "animate-pulse",
+  },
+  lovebrain: {
+    bg: "bg-gradient-to-br from-pink-50 via-rose-50 to-fuchsia-50 dark:from-pink-950/20 dark:via-rose-950/20 dark:to-fuchsia-950/20",
+    pattern: "bubbles",
+    animation: "animate-bounce-slow",
+  },
+  emo: {
+    bg: "bg-gradient-to-br from-slate-800 via-slate-900 to-black dark:from-black dark:via-slate-950 dark:to-slate-900",
+    pattern: "rain",
+    animation: "",
+  },
+  happy: {
+    bg: "bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 dark:from-yellow-950/20 dark:via-amber-950/20 dark:to-orange-950/20",
+    pattern: "stars",
+    animation: "animate-spin-slow",
+  },
+  confused: {
+    bg: "bg-gradient-to-br from-purple-50 via-violet-50 to-indigo-50 dark:from-purple-950/20 dark:via-violet-950/20 dark:to-indigo-950/20",
+    pattern: "blur",
+    animation: "animate-blur",
+  },
+  angry: {
+    bg: "bg-gradient-to-br from-red-50 via-rose-50 to-pink-50 dark:from-red-950/20 dark:via-rose-950/20 dark:to-pink-950/20",
+    pattern: "fire",
+    animation: "animate-pulse",
+  },
+  sad: {
+    bg: "bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 dark:from-blue-950/20 dark:via-cyan-950/20 dark:to-sky-950/20",
+    pattern: "clouds",
+    animation: "",
+  },
+  excited: {
+    bg: "bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20",
+    pattern: "sparkles",
+    animation: "animate-pulse",
+  },
+};
+
+const emotionLabels: Record<string, string> = {
+  anxiety: "焦虑",
+  lovebrain: "恋爱脑",
+  emo: "emo",
+  happy: "开心",
+  confused: "迷茫",
+  angry: "愤怒",
+  sad: "悲伤",
+  excited: "兴奋",
+};
+
+export default function EmotionPage() {
+  const [inputText, setInputText] = useState("");
+  const [mode, setMode] = useState<AnalysisMode>("savage");
+  const [isLoading, setIsLoading] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
+  const [fortuneCard, setFortuneCard] = useState<FortuneCard | null>(null);
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showCard, setShowCard] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!inputText.trim()) {
+      setError("请输入你的碎碎念或聊天记录");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setDiagnosis(null);
+    setFortuneCard(null);
+    setShowCard(false);
+
+    try {
+      const result = await generateDiagnosis(inputText, mode);
+      setDiagnosis(result);
+      
+      // 自动生成情感分析卡片
+      setIsGeneratingCard(true);
+      try {
+        const card = await generateFortuneCard(result);
+        setFortuneCard(card);
+        setShowCard(true);
+      } catch (cardError) {
+        console.error("生成卡片失败:", cardError);
+        // 卡片生成失败不影响诊断结果展示
+      } finally {
+        setIsGeneratingCard(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "心理分析失败，请重试");
+      console.error("心理分析错误:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 获取当前情绪效果
+  const currentEffect = diagnosis
+    ? emotionEffects[diagnosis.emotionType]
+    : null;
+
+  return (
+    <div className="min-h-screen bg-zinc-50 dark:bg-black transition-all duration-500">
+      {/* 动态背景效果 */}
+      {currentEffect && (
+        <div
+          className={`fixed inset-0 ${currentEffect.bg} transition-all duration-1000 ${currentEffect.animation}`}
+        >
+          {/* 焦虑 - 混乱线条 */}
+          {diagnosis?.emotionType === "anxiety" && (
+            <style jsx>{`
+              .anxiety-pattern {
+                background-image: repeating-linear-gradient(
+                  45deg,
+                  transparent,
+                  transparent 10px,
+                  rgba(0, 0, 0, 0.03) 10px,
+                  rgba(0, 0, 0, 0.03) 20px
+                );
+              }
+            `}</style>
+          )}
+          <div className={`absolute inset-0 ${currentEffect.pattern}`} />
+        </div>
+      )}
+
+      <main className="container mx-auto px-4 py-8 relative z-10">
+        {/* 标题和模式切换 */}
+        <div className="mb-8 text-center">
+          <h1 className="mb-4 text-4xl font-bold text-black dark:text-zinc-50">
+            💭 AI 情感分析
+          </h1>
+          <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
+            AI 心理镜像 · 看见真实的自己
+          </p>
+          
+          {/* 模式切换 */}
+          <div className="inline-flex rounded-lg border border-zinc-300 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900">
+            <button
+              onClick={() => setMode("healing")}
+              className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${
+                mode === "healing"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                  : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+              }`}
+            >
+              😇 治愈模式
+            </button>
+            <button
+              onClick={() => setMode("savage")}
+              className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${
+                mode === "savage"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                  : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+              }`}
+            >
+              😈 毒舌模式
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* 左侧：输入区域 */}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="input-text"
+                className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                输入你的碎碎念或聊天记录
+              </label>
+              <textarea
+                id="input-text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="粘贴一段最近的聊天记录、碎碎念，或者任何你想被分析的文字..."
+                className="min-h-[400px] w-full rounded-lg border border-zinc-300 bg-white/80 backdrop-blur-sm p-4 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-50 dark:placeholder-zinc-500 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+              />
+            </div>
+            <button
+              onClick={handleGenerate}
+              disabled={isLoading}
+              className="w-full rounded-lg bg-zinc-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus:ring-zinc-400"
+            >
+              {isLoading ? "💭 正在分析..." : "💭 开始分析"}
+            </button>
+
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+             {/* 右侧：诊断结果区域 */}
+             {showCard && fortuneCard ? (
+              <div className="flex flex-col items-center">
+                <FortuneCardComponent data={fortuneCard} />
+                <button
+                  onClick={() => setShowCard(false)}
+                  className="mt-4 px-6 py-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+                >
+                  查看详细分析
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                <label className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  灵魂诊断书
+                </label>
+                <div
+                  className={`relative flex-1 min-h-[500px] rounded-2xl border-2 overflow-hidden transition-all duration-500 ${
+                    diagnosis ? "scale-100 opacity-100" : "scale-95 opacity-50"
+                  }`}
+                  style={
+                    diagnosis
+                      ? {
+                          borderColor: diagnosis.emotionColor,
+                          boxShadow: `0 20px 60px -10px ${diagnosis.emotionColor}40`,
+                        }
+                      : {
+                          borderColor: "#e5e7eb",
+                        }
+                  }
+                >
+                  {/* 背景层 - 确保文字清晰 */}
+                  <div className="absolute inset-0 bg-white dark:bg-zinc-900" />
+                  <div 
+                    className="absolute inset-0 opacity-5"
+                    style={diagnosis ? { backgroundColor: diagnosis.emotionColor } : {}}
+                  />
+                  
+                  {/* 内容层 */}
+                  <div className="relative z-10 h-full p-8 flex flex-col">
+                    {isLoading || isGeneratingCard ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-4">
+                      <div className="relative">
+                        <div className="h-16 w-16 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-600 dark:border-zinc-700 dark:border-t-zinc-400"></div>
+                        <div className="absolute inset-0 flex items-center justify-center text-2xl">
+                          🔮
+                        </div>
+                      </div>
+                      <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                        {isGeneratingCard ? "正在生成情感分析卡片..." : "AI 正在深度分析你的内心..."}
+                      </p>
+                    </div>
+                  ) : diagnosis ? (
+                    <div className="flex h-full flex-col gap-6">
+                      {/* 情绪标签和强度 */}
+                      <div className="flex items-center justify-between flex-shrink-0">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="rounded-full px-4 py-1.5 text-sm font-bold text-white shadow-md"
+                            style={{ backgroundColor: diagnosis.emotionColor }}
+                          >
+                            {emotionLabels[diagnosis.emotionType]}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                              强度
+                            </span>
+                            <div className="h-2 w-20 bg-zinc-200 rounded-full overflow-hidden dark:bg-zinc-700">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{
+                                  width: `${diagnosis.intensity}%`,
+                                  backgroundColor: diagnosis.emotionColor,
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 min-w-[35px]">
+                              {diagnosis.intensity}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-xs font-medium text-zinc-400 dark:text-zinc-500">
+                          {new Date().toLocaleDateString("zh-CN", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 诊断标题 */}
+                      <div className="flex-shrink-0">
+                        <h2 className="text-3xl font-bold leading-tight text-zinc-900 dark:text-zinc-50 mb-3">
+                          {diagnosis.title}
+                        </h2>
+                        <div
+                          className="h-1.5 w-20 rounded-full"
+                          style={{ backgroundColor: diagnosis.emotionColor }}
+                        />
+                      </div>
+
+                      {/* 详细分析 */}
+                      <div className="flex-1 overflow-y-auto min-h-0">
+                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                          <p className="text-base leading-8 font-medium text-zinc-800 whitespace-pre-wrap dark:text-zinc-100">
+                            {diagnosis.analysis}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 情绪标签 */}
+                      <div className="flex flex-wrap gap-2 border-t-2 border-zinc-200 pt-4 flex-shrink-0 dark:border-zinc-700">
+                        {diagnosis.tags.map((tag, index) => (
+                          <span
+                            key={index}
+                            className="rounded-full bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm dark:bg-zinc-800 dark:text-zinc-200"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* 建议 */}
+                      <div className="rounded-xl border-2 bg-gradient-to-br from-zinc-50 to-zinc-100 p-5 flex-shrink-0 dark:from-zinc-800 dark:to-zinc-900 dark:border-zinc-700">
+                        <h3 className="mb-3 text-sm font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                          <span className="text-lg">💡</span>
+                          <span>建议</span>
+                        </h3>
+                        <ul className="space-y-2.5">
+                          {diagnosis.suggestions.map((suggestion, index) => (
+                            <li key={index} className="flex items-start gap-3">
+                              <span className="mt-1 text-zinc-400 dark:text-zinc-500 font-bold">•</span>
+                              <span className={`text-sm leading-6 font-medium text-zinc-700 dark:text-zinc-200 ${suggestion.includes("恋爱脑") ? "text-pink-600" : ""}`}>
+                                {suggestion}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* 查看卡片按钮 */}
+                      {fortuneCard && (
+                        <button
+                          onClick={() => setShowCard(true)}
+                          className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg"
+                        >
+                          💭 查看情感分析卡片
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+                      <div className="rounded-full bg-zinc-100 p-6 dark:bg-zinc-800">
+                        <span className="text-4xl">🔮</span>
+                      </div>
+                      <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                        输入你的碎碎念或聊天记录
+                        <br />
+                        让 AI 为你解读内心世界
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+

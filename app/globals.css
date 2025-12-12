@@ -24,3 +24,68 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* iOS 日期选择器样式修复 */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+}
+
+input[type="date"]:invalid::-webkit-datetime-edit {
+  color: transparent !important;
+}
+
+input[type="date"].empty-date::-webkit-datetime-edit {
+  color: transparent !important;
+}
+
+input[type="date"].empty-date::-webkit-datetime-edit-text {
+  color: transparent !important;
+}
+
+input[type="date"].empty-date::-webkit-datetime-edit-month-field,
+input[type="date"].empty-date::-webkit-datetime-edit-day-field,
+input[type="date"].empty-date::-webkit-datetime-edit-year-field {
+  color: transparent !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  height: auto;
+  color: transparent;
+  background: transparent;
+  cursor: pointer;
+  z-index: 30;
+}
+
+input[type="date"]::-webkit-datetime-edit {
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
+input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+input[type="date"]::-webkit-datetime-edit-text {
+  padding: 0 0.25em;
+}
+
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  padding: 0 0.25em;
+}
+
+/* iOS select 样式修复 */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+}
